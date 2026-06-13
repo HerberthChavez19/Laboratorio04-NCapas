@@ -7,12 +7,17 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.server.app.dto.auth.LoginDto;
+import com.server.app.dto.auth.UpdatePasswordDto;
+import com.server.app.dto.auth.UpdateProfileDto;
 import com.server.app.dto.user.UserCreateDto;
 import com.server.app.dto.user.UserUpdateDto;
 import com.server.app.entities.Role;
 import com.server.app.entities.User;
+import com.server.app.exceptions.BadRequestException;
 import com.server.app.exceptions.ConfictException;
 import com.server.app.exceptions.NotFoundException;
+import com.server.app.exceptions.UnauthorizedException;
 import com.server.app.repositories.RoleRepository;
 import com.server.app.repositories.UserRepository;
 
@@ -93,6 +98,85 @@ public class UserService {
       user.setPassword(dto.getPassword());
     }
 
+    return userRepository.save(user);
+  }
+
+  public User login(LoginDto dto) {
+    User user = userRepository.findUserByUsername(dto.getUsername())
+        .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
+
+    if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
+      throw new UnauthorizedException("Invalid credentials");
+    }
+
+    if (user.isBlocked()) {
+      throw new UnauthorizedException("Your account has been blocked");
+    }
+
+    if (user.getRole() == null || !Boolean.TRUE.equals(user.getRole().getActive())) {
+      throw new UnauthorizedException("Your account role is not active");
+    }
+
+    return user;
+  }
+
+  @Transactional
+  public User signUp(UserCreateDto dto) {
+    uniqueUsername(dto.getUsername(), null);
+    uniqueEmail(dto.getEmail(), null);
+
+    Role adminRole = roleRepository.findByName("ADMIN")
+        .orElseThrow(() -> new NotFoundException("ADMIN role not found"));
+
+    User user = new User();
+    user.setUsername(dto.getUsername());
+    user.setName(dto.getName());
+    user.setSurname(dto.getSurname());
+    user.setEmail(dto.getEmail());
+    user.setPassword(dto.getPassword());
+    user.setRole(adminRole);
+
+    return userRepository.save(user);
+  }
+
+  @Transactional
+  public User updateProfile(int userId, UpdateProfileDto dto) {
+    User user = findById(userId);
+
+    if (dto.getUsername() != null && !dto.getUsername().isBlank()) {
+      uniqueUsername(dto.getUsername(), userId);
+      user.setUsername(dto.getUsername());
+    }
+
+    if (dto.getName() != null && !dto.getName().isBlank()) {
+      user.setName(dto.getName());
+    }
+
+    if (dto.getSurname() != null && !dto.getSurname().isBlank()) {
+      user.setSurname(dto.getSurname());
+    }
+
+    if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
+      uniqueEmail(dto.getEmail(), userId);
+      user.setEmail(dto.getEmail());
+    }
+
+    return userRepository.save(user);
+  }
+
+  @Transactional
+  public User updatePassword(int userId, UpdatePasswordDto dto) {
+    User user = findById(userId);
+
+    if (!passwordEncoder.matches(dto.getOldpassword(), user.getPassword())) {
+      throw new BadRequestException("Old password is incorrect");
+    }
+
+    if (!dto.getNewpassword().equals(dto.getConfirmpassword())) {
+      throw new BadRequestException("New password and confirm password do not match");
+    }
+
+    user.setPassword(dto.getNewpassword());
     return userRepository.save(user);
   }
 

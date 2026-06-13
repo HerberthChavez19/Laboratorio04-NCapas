@@ -19,8 +19,8 @@ public class Role {
   @Column(unique = true, nullable = false, length = 50)
   private String name;
 
-  @Column()
-  private Boolean active;
+  @Column(columnDefinition = "boolean default true")
+  private Boolean active = true;
 
   @ManyToMany(fetch = FetchType.EAGER, cascade = { CascadeType.PERSIST, CascadeType.MERGE })
   @JoinTable(name = "role_permissions", // tabla intermedia
